@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<cinder>
+<block
+    name="Noam Lemma"
+    id="com.chordedconstructions.cinder-noamlemma"
+    git="https://github.com/pizthewiz/Cinder-NoamLemma.git"
+    author="Jean-Pierre Mouilleseaux"
+    summary="A client implementation for the Noam protocol"
+    url="https://github.com/pizthewiz/Cinder-Pipeline"
+    libraryUrl="http://noam.io/"
+    >
+    <supports os="macosx" />
+</block>
+</cinder>
