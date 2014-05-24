@@ -14,6 +14,14 @@ namespace Cinder { namespace Noam {
 
 using namespace ci;
 
+static const std::string sLemmaDialect = "Cinder-NoamLemma";
+static const std::string sLemmaVersion = "0.0.0";
+static const std::string sMarcoHeader = "marco";
+static const std::string sMarcoHost = "255.255.255.255";
+static const uint16_t sMarcoPort = 1030;
+static const size_t sMarcoBroadcastInterval = 5 * 1000;
+static const std::string sPoloHeader = "polo";
+
 LemmaRef Lemma::create(const std::string& guestName, const std::string& roomName) {
     return LemmaRef(new Lemma(guestName, roomName))->shared_from_this();
 }
@@ -74,13 +82,13 @@ void Lemma::setupDiscoveryClient() {
 
         // TODO - wait until server is setup?
         sendMarco();
-        mTimer->wait(5 * 1000, true);
+        mTimer->wait(sMarcoBroadcastInterval, true);
     });
     mUDPClient->connectResolveEventHandler([]() {
         cinder::app::console() << "NOTICE - UDP client end point resolved" << std::endl;
     });
 
-    mUDPClient->connect("255.255.255.255", static_cast<uint16_t>(1030));
+    mUDPClient->connect(sMarcoHost, sMarcoPort);
 }
 
 void Lemma::setupDiscoveryServer() {
@@ -101,7 +109,7 @@ void Lemma::setupDiscoveryServer() {
                 cinder::app::console() << "ERROR - Noam host response has an invalid number of children - " << data.getNumChildren() << std::endl;
             } else {
                 std::string header = data.getValueAtIndex<std::string>(0);
-                if (header != "polo") {
+                if (header != sPoloHeader) {
                     cinder::app::console() << "ERROR - Noam host response has an unknown header - " << header << std::endl;
                 } else {
                     std::string roomName = data.getValueAtIndex<std::string>(1);
@@ -129,11 +137,11 @@ void Lemma::setupDiscoveryServer() {
 
 void Lemma::sendMarco() {
     JsonTree root = JsonTree::makeArray();
-    root.pushBack(JsonTree("", "marco"));
+    root.pushBack(JsonTree("", sMarcoHeader));
     root.pushBack(JsonTree("", mGuestName));
     root.pushBack(JsonTree("", mRoomName));
-    root.pushBack(JsonTree("", "Cinder-NoamLemma"));
-    root.pushBack(JsonTree("", "0.0.0"));
+    root.pushBack(JsonTree("", sLemmaDialect));
+    root.pushBack(JsonTree("", sLemmaVersion));
     std::string jsonString = root.serialize();
     Buffer buffer = UdpSession::stringToBuffer(jsonString);
     mUDPClientSession->write(buffer);
