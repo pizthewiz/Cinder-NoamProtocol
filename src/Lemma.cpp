@@ -16,11 +16,12 @@ using namespace ci;
 
 static const std::string sLemmaDialect = "Cinder-NoamLemma";
 static const std::string sLemmaVersion = "0.0.0";
-static const std::string sMarcoHeader = "marco";
-static const std::string sMarcoHost = "255.255.255.255";
-static const uint16_t sMarcoPort = 1030;
-static const size_t sMarcoBroadcastInterval = 5 * 1000;
-static const std::string sPoloHeader = "polo";
+
+static const std::string sAvailabilityBroadcastHost = "255.255.255.255";
+static const uint16_t sAvailabilityBroadcastPort = 1030;
+static const size_t sAvailabilityBroadcastInterval = 1 * 1000;
+static const std::string sAvailabilityBroadcastHeader = "marco";
+static const std::string sAvailabilityBroadcastResponseHeader = "polo";
 
 LemmaRef Lemma::create(const std::string& guestName, const std::string& roomName) {
     return LemmaRef(new Lemma(guestName, roomName))->shared_from_this();
@@ -30,25 +31,28 @@ Lemma::Lemma(const std::string& guestName, const std::string& roomName) : mConne
 }
 
 Lemma::~Lemma() {
+    mAvailabilityBroadcastTimer = nullptr;
     mUDPClient = nullptr;
-    mTimer = nullptr;
+    mUDPClientSession = nullptr;
+    mUDPServer = nullptr;
 }
 
 #pragma mark -
 
 void Lemma::begin() {
-    // TODO - handle overlapping begins
+    // TODO - handle begin while isConnected() == true
     setupDiscoveryClient();
 }
 
-#pragma mark -
+#pragma mark - DISCOVERY
 
 void Lemma::setupDiscoveryClient() {
-    mTimer = WaitTimer::create(ci::app::App::get()->io_service());
-    mTimer->connectWaitEventHandler([&]() {
-        sendMarco();
+    mAvailabilityBroadcastTimer = WaitTimer::create(ci::app::App::get()->io_service());
+    mAvailabilityBroadcastTimer->connectErrorEventHandler([&](std::string message, size_t arg) {
+        cinder::app::console() << "ERROR - availabilty broadcast timer - " << message << " " << arg << std::endl;
     });
-    mTimer->connectErrorEventHandler([&](std::string message, size_t arg) {
+    mAvailabilityBroadcastTimer->connectWaitEventHandler([&]() {
+        sendAvailabilityBroadcast();
     });
 
     mUDPClient = UdpClient::create(ci::app::App::get()->io_service());
@@ -61,7 +65,7 @@ void Lemma::setupDiscoveryClient() {
             cinder::app::console() << "ERROR - UDP client session - " << err << std::endl;
         });
         mUDPClientSession->connectWriteEventHandler([](size_t bytesTransferred) {
-            cinder::app::console() << "NOTICE - UDP client session wrote " << bytesTransferred << "B" << std::endl;
+            cinder::app::console() << "NOTICE - UDP client session wrote " << bytesTransferred << " bytes" << std::endl;
         });
 
         // enable broadcast
@@ -73,78 +77,76 @@ void Lemma::setupDiscoveryClient() {
         boost::system::error_code errorCode;
         mUDPClientSession->getSocket()->set_option(addressOption, errorCode);
         if (errorCode) {
-            cinder::app::console() << "NOTICE - UDP client session failed to enable address reuse " << errorCode << std::endl;
+            cinder::app::console() << "ERROR - UDP client session failed to enable address reuse " << errorCode << std::endl;
         }
 
         unsigned short port = mUDPClientSession->getSocket()->local_endpoint().port();
         cinder::app::console() << "NOTICE - UDP client session sending from port " << port << std::endl;
-        setupDiscoveryServer();
+
+        setupDiscoveryServer(static_cast<uint16_t>(port));
 
         // TODO - wait until server is setup?
-        sendMarco();
-        mTimer->wait(sMarcoBroadcastInterval, true);
+        sendAvailabilityBroadcast();
     });
     mUDPClient->connectResolveEventHandler([]() {
-        cinder::app::console() << "NOTICE - UDP client end point resolved" << std::endl;
+        cinder::app::console() << "NOTICE - UDP client endpoint resolved" << std::endl;
     });
 
-    mUDPClient->connect(sMarcoHost, sMarcoPort);
+    mUDPClient->connect(sAvailabilityBroadcastHost, sAvailabilityBroadcastPort);
 }
 
-void Lemma::setupDiscoveryServer() {
+void Lemma::setupDiscoveryServer(uint16_t port) {
     mUDPServer = UdpServer::create(ci::app::App::get()->io_service());
-    mUDPServer->connectAcceptEventHandler([&](UdpSessionRef session) {
-        mUDPServerSession = session;
-        mUDPServerSession->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
-            cinder::app::console() << "ERROR - UDP server session - " << err << std::endl;
-        });
-        mUDPServerSession->connectReadCompleteEventHandler([&]() {
-            mUDPServerSession->read();
-        });
-        mUDPServerSession->connectReadEventHandler([&](ci::Buffer buffer) {
-            std::string response = UdpSession::bufferToString(buffer);
-            cinder::app::console() << "NOTICE - Noam host response - " << response << std::endl;
-            JsonTree data = JsonTree(response);
-            if (data.getNumChildren() != 3) {
-                cinder::app::console() << "ERROR - Noam host response has an invalid number of children - " << data.getNumChildren() << std::endl;
-            } else {
-                std::string header = data.getValueAtIndex<std::string>(0);
-                if (header != sPoloHeader) {
-                    cinder::app::console() << "ERROR - Noam host response has an unknown header - " << header << std::endl;
-                } else {
-                    std::string roomName = data.getValueAtIndex<std::string>(1);
-                    uint16_t tcpPort = data.getValueAtIndex<uint16_t>(2);
-                    // TODO - do stuff!
-                }
-            }
-
-            mUDPServerSession->read();
-        });
-//        mUDPServerSession->connectWriteEventHandler();
-
-        unsigned short port = mUDPServerSession->getSocket()->local_endpoint().port();
-        cinder::app::console() << "NOTICE - UDP server session listening on port " << port << std::endl;
-
-        mUDPServerSession->read();
-    });
     mUDPServer->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
         cinder::app::console() << "ERROR - UDP server - " << err << std::endl;
     });
+    mUDPServer->connectAcceptEventHandler([&](UdpSessionRef session) {
+        session->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
+            cinder::app::console() << "ERROR - UDP server session - " << err << std::endl;
+        });
+        session->connectReadEventHandler2([&](ci::Buffer buffer, boost::asio::ip::udp::endpoint endpoint) {
+            std::string response = UdpSession::bufferToString(buffer);
+            cinder::app::console() << "NOTICE - host response - " << response << "\" from " << endpoint << std::endl;
+            JsonTree data = JsonTree(response);
+            if (data.getNumChildren() != 3) {
+                cinder::app::console() << "ERROR - host response has an invalid number of children - " << data.getNumChildren() << std::endl;
+            } else {
+                std::string header = data.getValueAtIndex<std::string>(0);
+                if (header != sAvailabilityBroadcastResponseHeader) {
+                    cinder::app::console() << "ERROR - host response has an unknown header - " << header << std::endl;
+                } else {
+//                    mRoomName = data.getValueAtIndex<std::string>(1);
+                    uint16_t port = data.getValueAtIndex<uint16_t>(2);
 
-    unsigned short port = mUDPClientSession->getSocket()->local_endpoint().port();
-    mUDPServer->accept(static_cast<uint16_t>(port));
+                    // TODO - do something
+                }
+            }
+        });
+
+        session->read();
+    });
+
+    // listen on client's send port
+    mUDPServer->accept(port);
+    cinder::app::console() << "NOTICE - UDP server listening on port " << port << std::endl;
 }
 
-void Lemma::sendMarco() {
-    JsonTree root = JsonTree::makeArray();
-    root.pushBack(JsonTree("", sMarcoHeader));
-    root.pushBack(JsonTree("", mGuestName));
-    root.pushBack(JsonTree("", mRoomName));
-    root.pushBack(JsonTree("", sLemmaDialect));
-    root.pushBack(JsonTree("", sLemmaVersion));
-    std::string jsonString = root.serialize();
+void Lemma::sendAvailabilityBroadcast() {
+    if (mConnected) {
+        return;
+    }
+
+    JsonTree rootArray = JsonTree::makeArray();
+    rootArray.pushBack(JsonTree("", sAvailabilityBroadcastHeader));
+    rootArray.pushBack(JsonTree("", mGuestName));
+    rootArray.pushBack(JsonTree("", mRoomName));
+    rootArray.pushBack(JsonTree("", sLemmaDialect));
+    rootArray.pushBack(JsonTree("", sLemmaVersion));
+    std::string jsonString = rootArray.serialize();
     Buffer buffer = UdpSession::stringToBuffer(jsonString);
     mUDPClientSession->write(buffer);
+
+    mAvailabilityBroadcastTimer->wait(sAvailabilityBroadcastInterval, false);
 }
 
 }}

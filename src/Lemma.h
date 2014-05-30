@@ -31,20 +31,18 @@ private:
     Lemma(const std::string& guestName, const std::string& roomName);
 
     void setupDiscoveryClient();
-    void setupDiscoveryServer();
-    void sendMarco();
+    void setupDiscoveryServer(uint16_t port);
+    void sendAvailabilityBroadcast();
 
+    bool mConnected;
     std::string mGuestName;
     std::string mRoomName;
 
-    bool mConnected;
-
-    // host discovery
-    WaitTimerRef mTimer;
+    // discovery
+    WaitTimerRef mAvailabilityBroadcastTimer;
     UdpClientRef mUDPClient;
     UdpSessionRef mUDPClientSession;
     UdpServerRef mUDPServer;
-    UdpSessionRef mUDPServerSession;
 };
 
 }}
