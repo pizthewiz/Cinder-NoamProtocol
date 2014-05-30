@@ -11,6 +11,8 @@
 #include "WaitTimer.h"
 #include "UdpClient.h"
 #include "UdpServer.h"
+#include "TcpClient.h"
+#include <boost/any.hpp>
 
 namespace Cinder { namespace Noam {
 
@@ -34,15 +36,25 @@ private:
     void setupDiscoveryServer(uint16_t port);
     void sendAvailabilityBroadcast();
 
+    void setupMessagingClient(const std::string& host, uint16_t port);
+    void sendRegistration();
+
     bool mConnected;
     std::string mGuestName;
     std::string mRoomName;
+
+    typedef std::function<void(std::string, boost::any)> MessageHandler;
+    std::map<std::string, MessageHandler> mMessageHandlerMap;
 
     // discovery
     WaitTimerRef mAvailabilityBroadcastTimer;
     UdpClientRef mUDPClient;
     UdpSessionRef mUDPClientSession;
     UdpServerRef mUDPServer;
+
+    // registration and messaging
+    TcpClientRef mTCPClient;
+    TcpSessionRef mTCPClientSession;
 };
 
 }}

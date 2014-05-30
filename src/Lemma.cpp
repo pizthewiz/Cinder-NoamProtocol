@@ -23,6 +23,8 @@ static const size_t sAvailabilityBroadcastInterval = 1 * 1000;
 static const std::string sAvailabilityBroadcastHeader = "marco";
 static const std::string sAvailabilityBroadcastResponseHeader = "polo";
 
+static const std::string sRegistrationMessageHeader = "register";
+
 LemmaRef Lemma::create(const std::string& guestName, const std::string& roomName) {
     return LemmaRef(new Lemma(guestName, roomName))->shared_from_this();
 }
@@ -35,6 +37,8 @@ Lemma::~Lemma() {
     mUDPClient = nullptr;
     mUDPClientSession = nullptr;
     mUDPServer = nullptr;
+    mTCPClient = nullptr;
+    mTCPClientSession = nullptr;
 }
 
 #pragma mark -
@@ -117,8 +121,7 @@ void Lemma::setupDiscoveryServer(uint16_t port) {
                 } else {
 //                    mRoomName = data.getValueAtIndex<std::string>(1);
                     uint16_t port = data.getValueAtIndex<uint16_t>(2);
-
-                    // TODO - do something
+                    setupMessagingClient(endpoint.address().to_string(), port);
                 }
             }
         });
@@ -147,6 +150,76 @@ void Lemma::sendAvailabilityBroadcast() {
     mUDPClientSession->write(buffer);
 
     mAvailabilityBroadcastTimer->wait(sAvailabilityBroadcastInterval, false);
+}
+
+#pragma mark - REGISTRATION AND MESSAGING
+
+void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
+    mTCPClient = TcpClient::create(ci::app::App::get()->io_service());
+    mTCPClient->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
+        cinder::app::console() << "ERROR - TCP client - " << err << std::endl;
+    });
+    mTCPClient->connectConnectEventHandler([&](TcpSessionRef session) {
+        mTCPClientSession = session;
+        mTCPClientSession->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
+            cinder::app::console() << "ERROR - TCP client session - " << err << std::endl;
+        });
+        mTCPClientSession->connectCloseEventHandler([&]() {
+            cinder::app::console() << "NOTICE - TCP client session closed" << std::endl;
+            mConnected = false;
+            // TODO - availabilty broadcast again?
+        });
+        mTCPClientSession->connectReadEventHandler([&](ci::Buffer buffer) {
+            // TODO - append data
+            mTCPClientSession->read();
+        });
+        mTCPClientSession->connectReadCompleteEventHandler([&]() {
+            // TODO - process data
+            mTCPClientSession->read();
+        });
+        mTCPClientSession->connectWriteEventHandler([&](size_t bytesTransferred) {
+            cinder::app::console() << "NOTICE - TCP client session wrote " << bytesTransferred << " bytes" << std::endl;
+        });
+
+        mConnected = true;
+        sendRegistration();
+    });
+    mTCPClient->connectResolveEventHandler([]() {
+        cinder::app::console() << "NOTICE - TCP client endpoint resolved" << std::endl;
+    });
+
+    mTCPClient->connect(host, port);
+}
+
+void Lemma::sendRegistration() {
+    JsonTree rootArray = JsonTree::makeArray();
+    rootArray.pushBack(JsonTree("", sRegistrationMessageHeader));
+    rootArray.pushBack(JsonTree("", mGuestName));
+    unsigned short port = mTCPClientSession->getSocket()->local_endpoint().port();
+    rootArray.pushBack(JsonTree("", port));
+    JsonTree hearsArray = JsonTree::makeArray();
+    for (const auto& kv : mMessageHandlerMap) {
+        hearsArray.pushBack(JsonTree("", kv.first));
+    }
+    rootArray.pushBack(hearsArray);
+    JsonTree speaksArray = JsonTree::makeArray();
+    rootArray.pushBack(speaksArray);
+    rootArray.pushBack(JsonTree("", sLemmaDialect));
+    rootArray.pushBack(JsonTree("", sLemmaVersion));
+    // NB - optional
+//    JsonTree optionsObject = JsonTree::makeObject();
+//    optionsObject.pushBack(JsonTree("heartbeat", 20.0));
+//    optionsObject.pushBack(JsonTree("heartbeat_ack", true));
+//    rootArray.pushBack(optionsObject);
+    std::string jsonString = rootArray.serialize();
+    Buffer jsonBuffer = UdpSession::stringToBuffer(jsonString);
+
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(6) << jsonBuffer.getDataSize();
+    std::string data = ss.str() + jsonString;
+    Buffer buffer = UdpSession::stringToBuffer(data);
+
+    mTCPClientSession->write(buffer);
 }
 
 }}
