@@ -27,10 +27,10 @@ public:
     ~Lemma();
 
     template<typename T, typename Y>
-    inline void connectMessageEventHandler(const std::string& eventName, T eventHandler, Y* eventHandlerObject) {
-        connectMessageEventHandler(eventName, std::bind(eventHandler, eventHandlerObject, std::placeholders::_2));
+    inline void connectMessageReceivedEventHandler(const std::string& eventName, T eventHandler, Y* eventHandlerObject) {
+        connectMessageReceivedEventHandler(eventName, std::bind(eventHandler, eventHandlerObject, std::placeholders::_2));
     }
-    void connectMessageEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler);
+    void connectMessageReceivedEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler);
 
     void sendMessage(const std::string& eventName, const std::string& eventValue);
 
@@ -48,7 +48,8 @@ private:
     void setupMessagingClient(const std::string& host, uint16_t port);
     void setupMessagingServer(uint16_t port);
     void sendRegistrationMessage();
-    void send(const JsonTree& root);
+    void sendHeartbeatMessage();
+    void sendJSON(const JsonTree& root);
 
     bool mConnected;
     std::string mGuestName;
@@ -63,6 +64,7 @@ private:
     UdpServerRef mUDPServer;
 
     // registration and messaging
+    WaitTimerRef mHeartbeatTimer;
     TcpClientRef mTCPClient;
     TcpSessionRef mTCPClientSession;
     TcpServerRef mTCPServer;

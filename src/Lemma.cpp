@@ -18,11 +18,14 @@ static const std::string sLemmaVersion = "0.0.0";
 
 static const std::string sAvailabilityBroadcastHost = "255.255.255.255";
 static const uint16_t sAvailabilityBroadcastPort = 1030;
-static const size_t sAvailabilityBroadcastInterval = 1 * 1000;
+static const size_t sAvailabilityBroadcastInterval = 3 * 1000;
 static const std::string sAvailabilityBroadcastHeader = "marco";
 static const std::string sAvailabilityBroadcastResponseHeader = "polo";
 
 static const std::string sRegistrationMessageHeader = "register";
+static const std::string sHeartbeatHeader = "heartbeat";
+static const size_t sHeartbeatInterval = 5 * 1000;
+static const std::string sHeartbeatAckHeader = "heartbeat_ack";
 static const std::string sEventMessageHeader = "event";
 
 LemmaRef Lemma::create(const std::string& guestName, const std::string& roomName) {
@@ -41,11 +44,12 @@ Lemma::~Lemma() {
     mTCPClientSession = nullptr;
     mTCPServer = nullptr;
     mTCPServerSession = nullptr;
+    mHeartbeatTimer = nullptr;
 }
 
 #pragma mark -
 
-void Lemma::connectMessageEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler) {
+void Lemma::connectMessageReceivedEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler) {
     if (mMessageEventHandlerMap.count(eventName)) {
         cinder::app::console() << "NOTICE - replacing message event handler for event \"" << eventName << "\"" << std::endl;
     }
@@ -62,7 +66,7 @@ void Lemma::sendMessage(const std::string& eventName, const std::string& eventVa
     rootArray.pushBack(JsonTree("", mGuestName));
     rootArray.pushBack(JsonTree("", eventName));
     rootArray.pushBack(JsonTree("", eventValue));
-    send(rootArray);
+    sendJSON(rootArray);
 }
 
 void Lemma::begin() {
@@ -179,6 +183,14 @@ void Lemma::sendAvailabilityBroadcast() {
 #pragma mark - REGISTRATION AND MESSAGING
 
 void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
+    mHeartbeatTimer = WaitTimer::create(ci::app::App::get()->io_service());
+    mHeartbeatTimer->connectErrorEventHandler([&](std::string message, size_t arg) {
+        cinder::app::console() << "ERROR - heartbeat timer - " << message << " " << arg << std::endl;
+    });
+    mHeartbeatTimer->connectWaitEventHandler([&]() {
+        sendHeartbeatMessage();
+    });
+
     mTCPClient = TcpClient::create(ci::app::App::get()->io_service());
     mTCPClient->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
         cinder::app::console() << "ERROR - TCP client - " << err << std::endl;
@@ -207,6 +219,7 @@ void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
         // TODO - wait until server is setup?
         mConnected = true;
         sendRegistrationMessage();
+        sendHeartbeatMessage();
     });
     mTCPClient->connectResolveEventHandler([]() {
         cinder::app::console() << "NOTICE - TCP client endpoint resolved" << std::endl;
@@ -232,15 +245,18 @@ void Lemma::setupMessagingServer(uint16_t port) {
         });
         mTCPServerSession->connectReadEventHandler([&](ci::Buffer buffer) {
             std::string dataString = TcpSession::bufferToString(buffer);
-            cinder::app::console() << "NOTICE - received event message \"" << dataString << "\"" << std::endl;
+            cinder::app::console() << "NOTICE - received message \"" << dataString << "\"" << std::endl;
             size_t length = fromString<size_t>(dataString.substr(0, 6));
             std::string messageString = dataString.substr(6);
+            // TODO - need to do some buffer management as 1 buffer != 1 message
             if (messageString.length() != length) {
-                cinder::app::console() << "ERROR - event message length " << messageString.length() << " != expected length " << length << std::endl;
+                cinder::app::console() << "ERROR - message length " << messageString.length() << " != expected length " << length << std::endl;
             } else {
                 JsonTree message = JsonTree(messageString);
                 std::string header = message[0].getValue<std::string>();
-                if (header != sEventMessageHeader) {
+                if (header == sHeartbeatAckHeader) {
+                    // ack
+                } else if (header != sEventMessageHeader) {
                     cinder::app::console() << "ERROR - bad event message header \"" << header << "\"" << std::endl;
                 } else {
                     std::string guestName = message[1].getValue<std::string>();
@@ -285,15 +301,27 @@ void Lemma::sendRegistrationMessage() {
     rootArray.pushBack(speaksArray);
     rootArray.pushBack(JsonTree("", sLemmaDialect));
     rootArray.pushBack(JsonTree("", sLemmaVersion));
-    // NB - optional
-//    JsonTree optionsObject = JsonTree::makeObject();
-//    optionsObject.pushBack(JsonTree("heartbeat", 20.0));
+    JsonTree optionsObject = JsonTree::makeObject();
+    optionsObject.pushBack(JsonTree("heartbeat", (int)sHeartbeatInterval / 1000));
 //    optionsObject.pushBack(JsonTree("heartbeat_ack", true));
-//    rootArray.pushBack(optionsObject);
-    send(rootArray);
+    rootArray.pushBack(optionsObject);
+    sendJSON(rootArray);
 }
 
-void Lemma::send(const JsonTree& root) {
+void Lemma::sendHeartbeatMessage() {
+    if (!mConnected) {
+        return;
+    }
+
+    JsonTree rootArray = JsonTree::makeArray();
+    rootArray.pushBack(JsonTree("", sHeartbeatHeader));
+    rootArray.pushBack(JsonTree("", mGuestName));
+    sendJSON(rootArray);
+
+    mHeartbeatTimer->wait(sHeartbeatInterval, false);
+}
+
+void Lemma::sendJSON(const JsonTree& root) {
     std::string jsonString = root.serialize();
     Buffer jsonBuffer = UdpSession::stringToBuffer(jsonString);
 
