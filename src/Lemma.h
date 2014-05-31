@@ -12,7 +12,7 @@
 #include "UdpClient.h"
 #include "UdpServer.h"
 #include "TcpClient.h"
-#include <boost/any.hpp>
+#include "TcpServer.h"
 
 namespace Cinder { namespace Noam {
 
@@ -24,6 +24,12 @@ class Lemma : public std::enable_shared_from_this<Lemma> {
 public:
     static LemmaRef create(const std::string& guestName, const std::string& roomName = "");
     ~Lemma();
+
+    template<typename T, typename Y>
+    inline void connectMessageEventHandler(const std::string& eventName, T eventHandler, Y* eventHandlerObject) {
+        connectMessageEventHandler(eventName, std::bind(eventHandler, eventHandlerObject, std::placeholders::_2));
+    }
+    void connectMessageEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler);
 
     void begin();
 
@@ -37,14 +43,14 @@ private:
     void sendAvailabilityBroadcast();
 
     void setupMessagingClient(const std::string& host, uint16_t port);
+    void setupMessagingServer(uint16_t port);
     void sendRegistration();
 
     bool mConnected;
     std::string mGuestName;
     std::string mRoomName;
 
-    typedef std::function<void(std::string, boost::any)> MessageHandler;
-    std::map<std::string, MessageHandler> mMessageHandlerMap;
+    std::map<std::string, std::function<void(const std::string&, const std::string&)>> mMessageEventHandlerMap;
 
     // discovery
     WaitTimerRef mAvailabilityBroadcastTimer;
@@ -55,6 +61,8 @@ private:
     // registration and messaging
     TcpClientRef mTCPClient;
     TcpSessionRef mTCPClientSession;
+    TcpServerRef mTCPServer;
+    TcpSessionRef mTCPServerSession;
 };
 
 }}

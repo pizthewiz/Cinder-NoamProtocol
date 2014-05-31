@@ -24,6 +24,7 @@ static const std::string sAvailabilityBroadcastHeader = "marco";
 static const std::string sAvailabilityBroadcastResponseHeader = "polo";
 
 static const std::string sRegistrationMessageHeader = "register";
+static const std::string sEventMessageHeader = "event";
 
 LemmaRef Lemma::create(const std::string& guestName, const std::string& roomName) {
     return LemmaRef(new Lemma(guestName, roomName))->shared_from_this();
@@ -39,9 +40,18 @@ Lemma::~Lemma() {
     mUDPServer = nullptr;
     mTCPClient = nullptr;
     mTCPClientSession = nullptr;
+    mTCPServer = nullptr;
+    mTCPServerSession = nullptr;
 }
 
 #pragma mark -
+
+void Lemma::connectMessageEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler) {
+    if (mMessageEventHandlerMap.count(eventName)) {
+        cinder::app::console() << "NOTICE - replacing message event handler for event \"" << eventName << "\"" << std::endl;
+    }
+    mMessageEventHandlerMap[eventName] = eventHandler;
+}
 
 void Lemma::begin() {
     // TODO - handle begin while isConnected() == true
@@ -84,10 +94,10 @@ void Lemma::setupDiscoveryClient() {
             cinder::app::console() << "ERROR - UDP client session failed to enable address reuse " << errorCode << std::endl;
         }
 
-        unsigned short port = mUDPClientSession->getSocket()->local_endpoint().port();
-        cinder::app::console() << "NOTICE - UDP client session sending from port " << port << std::endl;
+        unsigned short localPort = mUDPClientSession->getSocket()->local_endpoint().port();
+        cinder::app::console() << "NOTICE - UDP client session sending from port " << localPort << std::endl;
 
-        setupDiscoveryServer(static_cast<uint16_t>(port));
+        setupDiscoveryServer(static_cast<uint16_t>(localPort));
 
         // TODO - wait until server is setup?
         sendAvailabilityBroadcast();
@@ -110,16 +120,16 @@ void Lemma::setupDiscoveryServer(uint16_t port) {
         });
         session->connectReadEventHandler2([&](ci::Buffer buffer, boost::asio::ip::udp::endpoint endpoint) {
             std::string response = UdpSession::bufferToString(buffer);
-            cinder::app::console() << "NOTICE - host response - " << response << "\" from " << endpoint << std::endl;
+            cinder::app::console() << "NOTICE - host server response - " << response << "\" from " << endpoint << std::endl;
             JsonTree data = JsonTree(response);
             if (data.getNumChildren() != 3) {
-                cinder::app::console() << "ERROR - host response has an invalid number of children - " << data.getNumChildren() << std::endl;
+                cinder::app::console() << "ERROR - host server response has an invalid number of children - " << data.getNumChildren() << std::endl;
             } else {
                 std::string header = data.getValueAtIndex<std::string>(0);
                 if (header != sAvailabilityBroadcastResponseHeader) {
-                    cinder::app::console() << "ERROR - host response has an unknown header - " << header << std::endl;
+                    cinder::app::console() << "ERROR - host server response has an unknown header - " << header << std::endl;
                 } else {
-//                    mRoomName = data.getValueAtIndex<std::string>(1);
+                    std::string room = data.getValueAtIndex<std::string>(1);
                     uint16_t port = data.getValueAtIndex<uint16_t>(2);
                     setupMessagingClient(endpoint.address().to_string(), port);
                 }
@@ -129,7 +139,8 @@ void Lemma::setupDiscoveryServer(uint16_t port) {
         session->read();
     });
 
-    // listen on client's send port
+    // listen on client send port
+    mUDPServer->setReuseAddress(true);
     mUDPServer->accept(port);
     cinder::app::console() << "NOTICE - UDP server listening on port " << port << std::endl;
 }
@@ -166,21 +177,21 @@ void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
         });
         mTCPClientSession->connectCloseEventHandler([&]() {
             cinder::app::console() << "NOTICE - TCP client session closed" << std::endl;
-            mConnected = false;
+//            mConnected = false;
             // TODO - availabilty broadcast again?
-        });
-        mTCPClientSession->connectReadEventHandler([&](ci::Buffer buffer) {
-            // TODO - append data
-            mTCPClientSession->read();
-        });
-        mTCPClientSession->connectReadCompleteEventHandler([&]() {
-            // TODO - process data
-            mTCPClientSession->read();
         });
         mTCPClientSession->connectWriteEventHandler([&](size_t bytesTransferred) {
             cinder::app::console() << "NOTICE - TCP client session wrote " << bytesTransferred << " bytes" << std::endl;
         });
 
+        // NB - apparently do not need to enable address reuse
+
+        unsigned short localPort = mTCPClientSession->getSocket()->local_endpoint().port();
+        cinder::app::console() << "NOTICE - TCP client session sending from port " << localPort << std::endl;
+
+        setupMessagingServer(localPort);
+
+        // TODO - wait until server is setup?
         mConnected = true;
         sendRegistration();
     });
@@ -191,6 +202,61 @@ void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
     mTCPClient->connect(host, port);
 }
 
+void Lemma::setupMessagingServer(uint16_t port) {
+    mTCPServer = TcpServer::create(ci::app::App::get()->io_service());
+    mTCPServer->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
+        cinder::app::console() << "ERROR - TCP server - " << err << std::endl;
+    });
+    mTCPServer->connectCancelEventHandler([&]() {
+        cinder::app::console() << "NOTICE - TCP server canceled" << std::endl;
+//            mConnected = false;
+        // TODO - availabilty broadcast again?
+    });
+    mTCPServer->connectAcceptEventHandler([&](TcpSessionRef session) {
+        mTCPServerSession = session;
+        mTCPServerSession->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
+            cinder::app::console() << "ERROR - TCP server session - " << err << std::endl;
+        });
+        mTCPServerSession->connectReadEventHandler([&](ci::Buffer buffer) {
+            std::string dataString = TcpSession::bufferToString(buffer);
+            cinder::app::console() << "NOTICE - received event message \"" << dataString << "\"" << std::endl;
+            size_t length = fromString<size_t>(dataString.substr(0, 6));
+            std::string messageString = dataString.substr(6);
+            if (messageString.length() != length) {
+                cinder::app::console() << "ERROR - event message length " << messageString.length() << " != expected length " << length << std::endl;
+            } else {
+                JsonTree message = JsonTree(messageString);
+                std::string header = message[0].getValue<std::string>();
+                if (header != sEventMessageHeader) {
+                    cinder::app::console() << "ERROR - bad event message header \"" << header << "\"" << std::endl;
+                } else {
+                    std::string guestName = message[1].getValue<std::string>();
+                    std::string eventName = message[2].getValue<std::string>();
+                    std::string eventValue = message[3].getValue<std::string>();
+
+                    // dispatch message
+                    if (mMessageEventHandlerMap.count(eventName)) {
+                        std::function<void(const std::string&, const std::string&)> eventHandler = mMessageEventHandlerMap[eventName];
+                        eventHandler(eventName, eventValue);
+                    }
+                }
+            }
+
+            mTCPServerSession->read();
+        });
+        mTCPServerSession->connectReadCompleteEventHandler([&]() {
+            cinder::app::console() << "NOTICE - TCP server session read complete" << std::endl;
+            // TODO - occurs when the host server fires the guest, go back into discovery mode
+        });
+
+        mTCPServerSession->read();
+    });
+
+    // listen on client send port
+    mTCPServer->accept(port);
+    cinder::app::console() << "NOTICE - TCP server listening on port " << port << std::endl;
+}
+
 void Lemma::sendRegistration() {
     JsonTree rootArray = JsonTree::makeArray();
     rootArray.pushBack(JsonTree("", sRegistrationMessageHeader));
@@ -198,7 +264,7 @@ void Lemma::sendRegistration() {
     unsigned short port = mTCPClientSession->getSocket()->local_endpoint().port();
     rootArray.pushBack(JsonTree("", port));
     JsonTree hearsArray = JsonTree::makeArray();
-    for (const auto& kv : mMessageHandlerMap) {
+    for (const auto& kv : mMessageEventHandlerMap) {
         hearsArray.pushBack(JsonTree("", kv.first));
     }
     rootArray.pushBack(hearsArray);
