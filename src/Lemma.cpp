@@ -8,7 +8,6 @@
 
 #include "Lemma.h"
 #include "cinder/app/App.h"
-#include "cinder/Json.h"
 
 namespace Cinder { namespace Noam {
 
@@ -63,16 +62,7 @@ void Lemma::sendMessage(const std::string& eventName, const std::string& eventVa
     rootArray.pushBack(JsonTree("", mGuestName));
     rootArray.pushBack(JsonTree("", eventName));
     rootArray.pushBack(JsonTree("", eventValue));
-
-    std::string jsonString = rootArray.serialize();
-    Buffer jsonBuffer = UdpSession::stringToBuffer(jsonString);
-
-    std::stringstream ss;
-    ss << std::setfill('0') << std::setw(6) << jsonBuffer.getDataSize();
-    std::string data = ss.str() + jsonString;
-    Buffer buffer = UdpSession::stringToBuffer(data);
-
-    mTCPClientSession->write(buffer);
+    send(rootArray);
 }
 
 void Lemma::begin() {
@@ -216,7 +206,7 @@ void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
 
         // TODO - wait until server is setup?
         mConnected = true;
-        sendRegistration();
+        sendRegistrationMessage();
     });
     mTCPClient->connectResolveEventHandler([]() {
         cinder::app::console() << "NOTICE - TCP client endpoint resolved" << std::endl;
@@ -280,7 +270,7 @@ void Lemma::setupMessagingServer(uint16_t port) {
     cinder::app::console() << "NOTICE - TCP server listening on port " << port << std::endl;
 }
 
-void Lemma::sendRegistration() {
+void Lemma::sendRegistrationMessage() {
     JsonTree rootArray = JsonTree::makeArray();
     rootArray.pushBack(JsonTree("", sRegistrationMessageHeader));
     rootArray.pushBack(JsonTree("", mGuestName));
@@ -300,8 +290,11 @@ void Lemma::sendRegistration() {
 //    optionsObject.pushBack(JsonTree("heartbeat", 20.0));
 //    optionsObject.pushBack(JsonTree("heartbeat_ack", true));
 //    rootArray.pushBack(optionsObject);
+    send(rootArray);
+}
 
-    std::string jsonString = rootArray.serialize();
+void Lemma::send(const JsonTree& root) {
+    std::string jsonString = root.serialize();
     Buffer jsonBuffer = UdpSession::stringToBuffer(jsonString);
 
     std::stringstream ss;

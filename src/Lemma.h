@@ -13,6 +13,7 @@
 #include "UdpServer.h"
 #include "TcpClient.h"
 #include "TcpServer.h"
+#include "cinder/Json.h"
 
 namespace Cinder { namespace Noam {
 
@@ -46,7 +47,8 @@ private:
 
     void setupMessagingClient(const std::string& host, uint16_t port);
     void setupMessagingServer(uint16_t port);
-    void sendRegistration();
+    void sendRegistrationMessage();
+    void send(const JsonTree& root);
 
     bool mConnected;
     std::string mGuestName;
