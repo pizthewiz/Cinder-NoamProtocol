@@ -202,8 +202,6 @@ void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
         });
         mTCPClientSession->connectCloseEventHandler([&]() {
             cinder::app::console() << "NOTICE - TCP client session closed" << std::endl;
-//            mConnected = false;
-            // TODO - availabilty broadcast again?
         });
         mTCPClientSession->connectWriteEventHandler([&](size_t bytesTransferred) {
             cinder::app::console() << "NOTICE - TCP client session wrote " << bytesTransferred << " bytes" << std::endl;
@@ -243,6 +241,9 @@ void Lemma::setupMessagingServer(uint16_t port) {
         mTCPServerSession->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
             cinder::app::console() << "ERROR - TCP server session - " << err << std::endl;
         });
+        mTCPServerSession->connectCloseEventHandler([&]() {
+            cinder::app::console() << "NOTICE - TCP server session closed" << std::endl;
+        });
         mTCPServerSession->connectReadEventHandler([&](ci::Buffer buffer) {
             std::string dataString = TcpSession::bufferToString(buffer);
             cinder::app::console() << "NOTICE - received message \"" << dataString << "\"" << std::endl;
@@ -275,7 +276,12 @@ void Lemma::setupMessagingServer(uint16_t port) {
         });
         mTCPServerSession->connectReadCompleteEventHandler([&]() {
             cinder::app::console() << "NOTICE - TCP server session read complete" << std::endl;
-            // TODO - occurs when the host server fires the guest, go back into discovery mode
+
+            // occurs when fired by the host server or the host server dies, go back into discovery mode
+            mConnected = false;
+            mTCPClientSession->close();
+            mTCPServerSession->close();
+            begin();
         });
 
         mTCPServerSession->read();
