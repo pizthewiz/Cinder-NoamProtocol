@@ -31,6 +31,8 @@ public:
     }
     void connectMessageEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler);
 
+    void sendMessage(const std::string& eventName, const std::string& eventValue);
+
     void begin();
 
     inline bool isConnected() const { return mConnected; }

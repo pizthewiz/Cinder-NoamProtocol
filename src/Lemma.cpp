@@ -53,6 +53,28 @@ void Lemma::connectMessageEventHandler(const std::string& eventName, const std::
     mMessageEventHandlerMap[eventName] = eventHandler;
 }
 
+void Lemma::sendMessage(const std::string& eventName, const std::string& eventValue) {
+    if (!mConnected) {
+        return;
+    }
+
+    JsonTree rootArray = JsonTree::makeArray();
+    rootArray.pushBack(JsonTree("", sEventMessageHeader));
+    rootArray.pushBack(JsonTree("", mGuestName));
+    rootArray.pushBack(JsonTree("", eventName));
+    rootArray.pushBack(JsonTree("", eventValue));
+
+    std::string jsonString = rootArray.serialize();
+    Buffer jsonBuffer = UdpSession::stringToBuffer(jsonString);
+
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(6) << jsonBuffer.getDataSize();
+    std::string data = ss.str() + jsonString;
+    Buffer buffer = UdpSession::stringToBuffer(data);
+
+    mTCPClientSession->write(buffer);
+}
+
 void Lemma::begin() {
     // TODO - handle begin while isConnected() == true
     setupDiscoveryClient();
@@ -156,6 +178,7 @@ void Lemma::sendAvailabilityBroadcast() {
     rootArray.pushBack(JsonTree("", mRoomName));
     rootArray.pushBack(JsonTree("", sLemmaDialect));
     rootArray.pushBack(JsonTree("", sLemmaVersion));
+
     std::string jsonString = rootArray.serialize();
     Buffer buffer = UdpSession::stringToBuffer(jsonString);
     mUDPClientSession->write(buffer);
@@ -277,6 +300,7 @@ void Lemma::sendRegistration() {
 //    optionsObject.pushBack(JsonTree("heartbeat", 20.0));
 //    optionsObject.pushBack(JsonTree("heartbeat_ack", true));
 //    rootArray.pushBack(optionsObject);
+
     std::string jsonString = rootArray.serialize();
     Buffer jsonBuffer = UdpSession::stringToBuffer(jsonString);
 
