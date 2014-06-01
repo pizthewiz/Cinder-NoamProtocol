@@ -27,12 +27,18 @@ public:
     ~Lemma();
 
     template<typename T, typename Y>
-    inline void connectMessageReceivedEventHandler(const std::string& eventName, T eventHandler, Y* eventHandlerObject) {
-        connectMessageReceivedEventHandler(eventName, std::bind(eventHandler, eventHandlerObject, std::placeholders::_2));
+    inline void connectMessageEventHandler(const std::string& eventName, T eventHandler, Y* eventHandlerObject) {
+        connectMessageEventHandler(eventName, std::bind(eventHandler, eventHandlerObject, std::placeholders::_2));
     }
-    void connectMessageReceivedEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler);
+    void connectMessageEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler);
 
+    void sendMessage(const std::string& eventName, bool eventValue);
+    void sendMessage(const std::string& eventName, double eventValue);
+    void sendMessage(const std::string& eventName, float eventValue);
+    void sendMessage(const std::string& eventName, int eventValue);
     void sendMessage(const std::string& eventName, const std::string& eventValue);
+    void sendMessage(const std::string& eventName, const char* eventValue);
+    void sendMessage(const std::string& eventName, const JsonTree& eventValue);
 
     void begin();
 
@@ -49,6 +55,9 @@ private:
     void setupMessagingServer(uint16_t port);
     void sendRegistrationMessage();
     void sendHeartbeatMessage();
+    template<typename T>
+    void sendEventMessage(const std::string& eventName, T eventValue);
+    void sendEventMessage(const std::string& eventName, const JsonTree& eventValue);
     void sendJSON(const JsonTree& root);
 
     bool mConnected;

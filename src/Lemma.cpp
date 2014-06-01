@@ -50,24 +50,39 @@ Lemma::~Lemma() {
 
 #pragma mark -
 
-void Lemma::connectMessageReceivedEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler) {
+void Lemma::connectMessageEventHandler(const std::string& eventName, const std::function<void(const std::string&, const std::string&)>& eventHandler) {
     if (mMessageEventHandlerMap.count(eventName)) {
         cinder::app::console() << "NOTICE - replacing message event handler for event \"" << eventName << "\"" << std::endl;
     }
     mMessageEventHandlerMap[eventName] = eventHandler;
 }
 
-void Lemma::sendMessage(const std::string& eventName, const std::string& eventValue) {
-    if (!mConnected) {
-        return;
-    }
+void Lemma::sendMessage(const std::string& eventName, bool eventValue) {
+    sendEventMessage(eventName, eventValue);
+}
 
-    JsonTree rootArray = JsonTree::makeArray();
-    rootArray.pushBack(JsonTree("", sEventMessageHeader));
-    rootArray.pushBack(JsonTree("", mGuestName));
-    rootArray.pushBack(JsonTree("", eventName));
-    rootArray.pushBack(JsonTree("", eventValue));
-    sendJSON(rootArray);
+void Lemma::sendMessage(const std::string& eventName, double eventValue) {
+    sendEventMessage(eventName, eventValue);
+}
+
+void Lemma::sendMessage(const std::string& eventName, float eventValue) {
+    sendEventMessage(eventName, eventValue);
+}
+
+void Lemma::sendMessage(const std::string& eventName, int eventValue) {
+    sendEventMessage(eventName, eventValue);
+}
+
+void Lemma::sendMessage(const std::string& eventName, const std::string& eventValue) {
+    sendEventMessage(eventName, eventValue);
+}
+
+void Lemma::sendMessage(const std::string& eventName, const char* eventValue) {
+    sendEventMessage(eventName, std::string(eventValue));
+}
+
+void Lemma::sendMessage(const std::string& eventName, const JsonTree& eventValue) {
+    sendEventMessage(eventName, eventValue);
 }
 
 void Lemma::begin() {
@@ -324,6 +339,35 @@ void Lemma::sendHeartbeatMessage() {
     sendJSON(rootArray);
 
     mHeartbeatTimer->wait(sHeartbeatInterval, false);
+}
+
+template<typename T>
+void Lemma::sendEventMessage(const std::string& eventName, T eventValue) {
+    if (!mConnected) {
+        return;
+    }
+
+    JsonTree rootArray = JsonTree::makeArray();
+    rootArray.pushBack(JsonTree("", sEventMessageHeader));
+    rootArray.pushBack(JsonTree("", mGuestName));
+    rootArray.pushBack(JsonTree("", eventName));
+    rootArray.pushBack(JsonTree("", eventValue));
+    sendJSON(rootArray);
+}
+
+void Lemma::sendEventMessage(const std::string& eventName, const JsonTree& eventValue) {
+    // NB - duplicated from above without wrapping eventValue in a JsonTree
+    //  couldn't sort out how to RTT it with a single method
+    if (!mConnected) {
+        return;
+    }
+
+    JsonTree rootArray = JsonTree::makeArray();
+    rootArray.pushBack(JsonTree("", sEventMessageHeader));
+    rootArray.pushBack(JsonTree("", mGuestName));
+    rootArray.pushBack(JsonTree("", eventName));
+    rootArray.pushBack(eventValue);
+    sendJSON(rootArray);
 }
 
 void Lemma::sendJSON(const JsonTree& root) {
