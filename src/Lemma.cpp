@@ -8,6 +8,7 @@
 
 #include "Lemma.h"
 #include "cinder/app/App.h"
+#include "boost/format.hpp"
 
 namespace Cinder { namespace Noam {
 
@@ -233,8 +234,6 @@ void Lemma::setupMessagingServer(uint16_t port) {
     });
     mTCPServer->connectCancelEventHandler([&]() {
         cinder::app::console() << "NOTICE - TCP server canceled" << std::endl;
-//            mConnected = false;
-        // TODO - availabilty broadcast again?
     });
     mTCPServer->connectAcceptEventHandler([&](TcpSessionRef session) {
         mTCPServerSession = session;
@@ -330,13 +329,9 @@ void Lemma::sendHeartbeatMessage() {
 void Lemma::sendJSON(const JsonTree& root) {
     std::string jsonString = root.serialize();
     Buffer jsonBuffer = UdpSession::stringToBuffer(jsonString);
-
-    std::stringstream ss;
-    ss << std::setfill('0') << std::setw(6) << jsonBuffer.getDataSize();
-    std::string data = ss.str() + jsonString;
-    Buffer buffer = UdpSession::stringToBuffer(data);
-
-    mTCPClientSession->write(buffer);
+    std::string dataString = str(boost::format("%06d") % jsonBuffer.getDataSize()) + jsonString;
+    Buffer dataBuffer = UdpSession::stringToBuffer(dataString);
+    mTCPClientSession->write(dataBuffer);
 }
 
 }}
