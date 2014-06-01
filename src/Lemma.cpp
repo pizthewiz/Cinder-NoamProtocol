@@ -37,10 +37,13 @@ Lemma::Lemma(const std::string& guestName, const std::string& roomName) : mConne
 }
 
 Lemma::~Lemma() {
+    end();
+
     mAvailabilityBroadcastTimer = nullptr;
     mUDPClient = nullptr;
     mUDPClientSession = nullptr;
     mUDPServer = nullptr;
+    mUDPServerSession = nullptr;
     mTCPClient = nullptr;
     mTCPClientSession = nullptr;
     mTCPServer = nullptr;
@@ -86,8 +89,38 @@ void Lemma::sendMessage(const std::string& eventName, const JsonTree& eventValue
 }
 
 void Lemma::begin() {
-    // TODO - handle begin while isConnected() == true
+    if (mConnected) {
+        return;
+    }
     setupDiscoveryClient();
+}
+
+#pragma mark -
+
+void Lemma::end() {
+    mConnected = false;
+
+    if (mUDPClientSession && mUDPClientSession->getSocket()->is_open()) {
+        boost::system::error_code err;
+        mUDPClientSession->getSocket()->close(err);
+        if (err) {
+            cinder::app::console() << "ERROR - UDP client session failed to close - " << err << std::endl;
+        }
+    }
+    if (mUDPServerSession && mUDPServerSession->getSocket()->is_open()) {
+        boost::system::error_code err;
+        mUDPServerSession->getSocket()->close(err);
+        if (err) {
+            cinder::app::console() << "ERROR - UDP server session failed to close - " << err << std::endl;
+        }
+    }
+
+    if (mTCPClientSession && mTCPClientSession->getSocket()->is_open()) {
+        mTCPClientSession->close();
+    }
+    if (mTCPServerSession && mTCPServerSession->getSocket()->is_open()) {
+        mTCPServerSession->close();
+    }
 }
 
 #pragma mark - DISCOVERY
@@ -147,10 +180,11 @@ void Lemma::setupDiscoveryServer(uint16_t port) {
         cinder::app::console() << "ERROR - UDP server - " << err << std::endl;
     });
     mUDPServer->connectAcceptEventHandler([&](UdpSessionRef session) {
-        session->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
+        mUDPServerSession = session;
+        mUDPServerSession->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
             cinder::app::console() << "ERROR - UDP server session - " << err << std::endl;
         });
-        session->connectReadEventHandler2([&](ci::Buffer buffer, boost::asio::ip::udp::endpoint endpoint) {
+        mUDPServerSession->connectReadEventHandler2([&](ci::Buffer buffer, boost::asio::ip::udp::endpoint endpoint) {
             std::string response = UdpSession::bufferToString(buffer);
             cinder::app::console() << "NOTICE - host server response - " << response << "\" from " << endpoint << std::endl;
             JsonTree data = JsonTree(response);
@@ -168,7 +202,7 @@ void Lemma::setupDiscoveryServer(uint16_t port) {
             }
         });
 
-        session->read();
+        mUDPServerSession->read();
     });
 
     // listen on client send port
@@ -292,9 +326,7 @@ void Lemma::setupMessagingServer(uint16_t port) {
             cinder::app::console() << "NOTICE - TCP server session read complete" << std::endl;
 
             // occurs when fired by the host server or the host server dies, go back into discovery mode
-            mConnected = false;
-            mTCPClientSession->close();
-            mTCPServerSession->close();
+            end();
             begin();
         });
 
@@ -372,9 +404,9 @@ void Lemma::sendEventMessage(const std::string& eventName, const JsonTree& event
 
 void Lemma::sendJSON(const JsonTree& root) {
     std::string jsonString = root.serialize();
-    Buffer jsonBuffer = UdpSession::stringToBuffer(jsonString);
+    Buffer jsonBuffer = TcpSession::stringToBuffer(jsonString);
     std::string dataString = str(boost::format("%06d") % jsonBuffer.getDataSize()) + jsonString;
-    Buffer dataBuffer = UdpSession::stringToBuffer(dataString);
+    Buffer dataBuffer = TcpSession::stringToBuffer(dataString);
     mTCPClientSession->write(dataBuffer);
 }
 

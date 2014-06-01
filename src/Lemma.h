@@ -47,6 +47,8 @@ public:
 private:
     Lemma(const std::string& guestName, const std::string& roomName);
 
+    void end();
+
     void setupDiscoveryClient();
     void setupDiscoveryServer(uint16_t port);
     void sendAvailabilityBroadcast();
@@ -71,6 +73,7 @@ private:
     UdpClientRef mUDPClient;
     UdpSessionRef mUDPClientSession;
     UdpServerRef mUDPServer;
+    UdpSessionRef mUDPServerSession;
 
     // registration and messaging
     WaitTimerRef mHeartbeatTimer;
