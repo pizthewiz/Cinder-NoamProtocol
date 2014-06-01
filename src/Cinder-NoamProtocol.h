@@ -1,5 +1,5 @@
 //
-//  Cinder-NoamLemma.h
+//  Cinder-NoamProtocol.h
 //  SmokeSignals
 //
 //  Created by Jean-Pierre Mouilleseaux on 22 May 2014.
