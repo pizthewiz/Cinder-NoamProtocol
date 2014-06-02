@@ -127,7 +127,7 @@ void Lemma::end() {
 
 void Lemma::setupDiscoveryClient() {
     mAvailabilityBroadcastTimer = WaitTimer::create(ci::app::App::get()->io_service());
-    mAvailabilityBroadcastTimer->connectErrorEventHandler([&](std::string message, size_t arg) {
+    mAvailabilityBroadcastTimer->connectErrorEventHandler([](std::string message, size_t arg) {
         cinder::app::console() << "ERROR - availabilty broadcast timer - " << message << " " << arg << std::endl;
     });
     mAvailabilityBroadcastTimer->connectWaitEventHandler([&]() {
@@ -234,7 +234,7 @@ void Lemma::sendAvailabilityBroadcast() {
 
 void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
     mHeartbeatTimer = WaitTimer::create(ci::app::App::get()->io_service());
-    mHeartbeatTimer->connectErrorEventHandler([&](std::string message, size_t arg) {
+    mHeartbeatTimer->connectErrorEventHandler([](std::string message, size_t arg) {
         cinder::app::console() << "ERROR - heartbeat timer - " << message << " " << arg << std::endl;
     });
     mHeartbeatTimer->connectWaitEventHandler([&]() {
@@ -250,10 +250,10 @@ void Lemma::setupMessagingClient(const std::string& host, uint16_t port) {
         mTCPClientSession->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
             cinder::app::console() << "ERROR - TCP client session - " << err << std::endl;
         });
-        mTCPClientSession->connectCloseEventHandler([&]() {
+        mTCPClientSession->connectCloseEventHandler([]() {
             cinder::app::console() << "NOTICE - TCP client session closed" << std::endl;
         });
-        mTCPClientSession->connectWriteEventHandler([&](size_t bytesTransferred) {
+        mTCPClientSession->connectWriteEventHandler([](size_t bytesTransferred) {
             cinder::app::console() << "NOTICE - TCP client session wrote " << bytesTransferred << " bytes" << std::endl;
         });
 
@@ -281,7 +281,7 @@ void Lemma::setupMessagingServer(uint16_t port) {
     mTCPServer->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
         cinder::app::console() << "ERROR - TCP server - " << err << std::endl;
     });
-    mTCPServer->connectCancelEventHandler([&]() {
+    mTCPServer->connectCancelEventHandler([]() {
         cinder::app::console() << "NOTICE - TCP server canceled" << std::endl;
     });
     mTCPServer->connectAcceptEventHandler([&](TcpSessionRef session) {
@@ -289,7 +289,7 @@ void Lemma::setupMessagingServer(uint16_t port) {
         mTCPServerSession->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
             cinder::app::console() << "ERROR - TCP server session - " << err << std::endl;
         });
-        mTCPServerSession->connectCloseEventHandler([&]() {
+        mTCPServerSession->connectCloseEventHandler([]() {
             cinder::app::console() << "NOTICE - TCP server session closed" << std::endl;
         });
         mTCPServerSession->connectReadEventHandler([&](ci::Buffer buffer) {
