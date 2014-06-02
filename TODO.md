@@ -1,6 +1,5 @@
 
 ### NOW
-- parse read data more carefully, pluck off only length
 - functional cinderblock.xml
 - sample app
 - README content

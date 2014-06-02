@@ -293,29 +293,47 @@ void Lemma::setupMessagingServer(uint16_t port) {
             cinder::app::console() << "NOTICE - TCP server session closed" << std::endl;
         });
         mTCPServerSession->connectReadEventHandler([&](ci::Buffer buffer) {
-            std::string dataString = TcpSession::bufferToString(buffer);
-            cinder::app::console() << "NOTICE - received message \"" << dataString << "\"" << std::endl;
-            size_t length = fromString<size_t>(dataString.substr(0, 6));
-            std::string messageString = dataString.substr(6);
-            // TODO - need to do some buffer management as 1 buffer != 1 message
-            if (messageString.length() != length) {
-                cinder::app::console() << "ERROR - message length " << messageString.length() << " != expected length " << length << std::endl;
-            } else {
-                JsonTree message = JsonTree(messageString);
-                std::string header = message[0].getValue<std::string>();
-                if (header == sHeartbeatAckHeader) {
-                    // ack
-                } else if (header != sEventMessageHeader) {
-                    cinder::app::console() << "ERROR - bad event message header \"" << header << "\"" << std::endl;
-                } else {
-                    std::string guestName = message[1].getValue<std::string>();
-                    std::string eventName = message[2].getValue<std::string>();
-                    std::string eventValue = message[3].getValue<std::string>();
+            // NB - multiple messages can be received at once. Could occur on OS X Mavericks+ via Timer Coalescing
+            //  see Cinder-AppNap https://github.com/pizthewiz/Cinder-AppNap to tweak Timer Coalescing behavior
 
-                    // dispatch message
-                    if (mMessageEventHandlerMap.count(eventName)) {
-                        std::function<void(const std::string&, const std::string&)> eventHandler = mMessageEventHandlerMap[eventName];
-                        eventHandler(eventName, eventValue);
+            size_t offset = 0;
+            bool status = true;
+            while (status) {
+                // message length stored in the first 6 bytes
+                std::string messageLengthString = std::string(static_cast<const char*>((char*)buffer.getData() + offset), 6);
+                size_t messageLength = fromString<size_t>(messageLengthString);
+                offset += 6;
+
+                // verify length
+                if (messageLength > buffer.getDataSize() - offset) {
+                    cinder::app::console() << "ERROR - message length " << messageLength << " larger than remaining buffer data length " << (buffer.getDataSize() - offset) << std::endl;
+                    status = false;
+                } else {
+                    // parse and process message
+                    std::string messageString = std::string(static_cast<const char*>((char*)buffer.getData() + offset), messageLength);
+                    JsonTree message = JsonTree(messageString);
+                    std::string header = message[0].getValue<std::string>();
+                    if (header != sEventMessageHeader && header != sHeartbeatAckHeader) {
+                        cinder::app::console() << "ERROR - bad event message header \"" << header << "\"" << std::endl;
+                    } else if (header == sHeartbeatAckHeader) {
+                        // heartbeat ack, ignore
+                    } else if (header != sEventMessageHeader) {
+                        cinder::app::console() << "ERROR - bad event message header \"" << header << "\"" << std::endl;
+                    } else {
+                        std::string guestName = message[1].getValue<std::string>();
+                        std::string eventName = message[2].getValue<std::string>();
+                        std::string eventValue = message[3].getValue<std::string>();
+
+                        // dispatch message
+                        if (mMessageEventHandlerMap.count(eventName)) {
+                            std::function<void(const std::string&, const std::string&)> eventHandler = mMessageEventHandlerMap[eventName];
+                            eventHandler(eventName, eventValue);
+                        }
+                    }
+                    
+                    offset += messageLength;
+                    if (offset + 6 >= buffer.getDataSize()) {
+                        status = false;
                     }
                 }
             }
