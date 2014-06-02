@@ -1,9 +1,8 @@
 
 ### NOW
 - parse read data more carefully, pluck off only length
-- proper cinder-asio fork
-- sample app
 - functional cinderblock.xml
+- sample app
 - README content
 
 ### SOON
