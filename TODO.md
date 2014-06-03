@@ -1,8 +1,6 @@
 
 ### NOW
-- functional cinderblock.xml
 - sample app
-- README content
 
 ### SOON
 - setup timers in constructor
