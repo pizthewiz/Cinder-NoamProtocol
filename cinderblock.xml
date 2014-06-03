@@ -10,7 +10,7 @@
     libraryUrl="http://noam.io/"
     >
     <supports os="macosx" />
-    <header>src/Cinder-NoamLemma.h</header>
+    <header>src/Cinder-NoamProtocol.h</header>
     <header>src/Lemma.h</header>
     <source>src/Lemma.cpp</source>
 </block>
