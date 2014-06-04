@@ -322,7 +322,13 @@ void Lemma::setupMessagingServer(uint16_t port) {
                     } else {
                         std::string guestName = message[1].getValue<std::string>();
                         std::string eventName = message[2].getValue<std::string>();
-                        std::string eventValue = message[3].getValue<std::string>();
+                        std::string eventValue;
+                        if (message[3].getNodeType() != JsonTree::NODE_VALUE) {
+                            JsonTree object = message[3];
+                            eventValue = object.serialize();
+                        } else {
+                            eventValue = message[3].getValue<std::string>();
+                        }
 
                         // dispatch message
                         if (mMessageEventHandlerMap.count(eventName)) {
@@ -330,7 +336,7 @@ void Lemma::setupMessagingServer(uint16_t port) {
                             eventHandler(eventName, eventValue);
                         }
                     }
-                    
+
                     offset += messageLength;
                     if (offset + 6 >= buffer.getDataSize()) {
                         status = false;
