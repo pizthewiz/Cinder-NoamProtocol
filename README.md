@@ -7,7 +7,7 @@ This simple example creates a guest, listens for and logs *vultureKey* messages 
 void SomeApp::setup() {
     mLemma = Lemma::create("buzzard");
     mLemma->connectMessageEventHandler("vultureKeys", [](const std::string& eventName, const std::string& eventValue) {
-        // eventValue could be a bool, double, float, int, string or JsonTree
+        // eventValue could contain a bool, double, float, int, stringified JSON or just a string
         console() << eventName << " - " << fromString<int>(eventValue) << std::endl;
     });
     mLemma->begin();
