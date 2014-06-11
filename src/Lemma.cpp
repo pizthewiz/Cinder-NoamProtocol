@@ -316,7 +316,7 @@ void Lemma::setupMessagingServer(uint16_t port) {
                     if (header != sEventMessageHeader && header != sHeartbeatAckHeader) {
                         cinder::app::console() << "ERROR - bad event message header \"" << header << "\"" << std::endl;
                     } else if (header == sHeartbeatAckHeader) {
-                        // heartbeat ack, ignore
+                        // heartbeat ack, ignore for now 👍
                     } else if (header != sEventMessageHeader) {
                         cinder::app::console() << "ERROR - bad event message header \"" << header << "\"" << std::endl;
                     } else {
