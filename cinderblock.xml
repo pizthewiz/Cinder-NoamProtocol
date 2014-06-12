@@ -5,7 +5,7 @@
     id="com.chordedconstructions.cinder-noamprotocol"
     git="https://github.com/pizthewiz/Cinder-NoamProtocol.git"
     author="Jean-Pierre Mouilleseaux"
-    summary="An implementation of the Noam protocol"
+    summary="An implementation of the Noam protocol."
     url="https://github.com/pizthewiz/Cinder-NoamProtocol"
     libraryUrl="http://noam.io/"
     >
@@ -13,5 +13,7 @@
     <header>src/Cinder-NoamProtocol.h</header>
     <header>src/Lemma.h</header>
     <source>src/Lemma.cpp</source>
+    <copyExclude>samples</copyExclude>
+    <copyExclude>verification</copyExclude>
 </block>
 </cinder>
