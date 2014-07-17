@@ -7,7 +7,6 @@
 //  Copyright 2014 Chorded Constructions. All rights reserved.
 //
 
-
 #include "cinder/app/AppNative.h"
 #include "cinder/gl/gl.h"
 #include "cinder/Utilities.h"
@@ -56,7 +55,7 @@ void LemmaVerificationApp::setup() {
         mLemma->sendMessage("SumVerify", value);
     });
 
-// https://github.com/noam-io/host/blob/master/lemma_verification/tests/name.rb
+    // https://github.com/noam-io/host/blob/master/lemma_verification/tests/name.rb
     mLemma->connectMessageEventHandler("Name", [&](const std::string& eventName, const std::string& eventValue) {
         JsonTree object = JsonTree(eventValue);
         string name = str(boost::format("%1% %2%") % object.getValueForKey("firstName") % object.getValueForKey("lastName"));
@@ -72,7 +71,7 @@ void LemmaVerificationApp::update() {
 }
 
 void LemmaVerificationApp::draw() {
-    gl::clear(Color::black());
+    gl::clear();
 }
 
 CINDER_APP_NATIVE(LemmaVerificationApp, RendererGl)
