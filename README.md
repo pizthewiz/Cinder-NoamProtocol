@@ -19,4 +19,4 @@ void SomeApp::keyDown(KeyEvent event) {
 ```
 
 ### REQUIREMENTS
-`Cinder-NoamProtocol` builds on top of [Stephen Schieberl](http://www.bantherewind.com)'s great [`Cinder-Asio`](https://github.com/BanTheRewind/Cinder-Asio) CinderBlock and more specifically, currently requires the [noam-dev](https://github.com/pizthewiz/Cinder-Asio/tree/noam-dev) branch on my own fork until some UDP server issues are sorted out. The block has only been tested with the [dev](https://github.com/Cinder/Cinder/tree/dev) branch of the [Cinder repository](https://github.com/cinder/Cinder) on OS X Mavericks.
+`Cinder-NoamProtocol` builds on top of [Stephen Schieberl](http://www.bantherewind.com)'s great [`Cinder-Asio`](https://github.com/BanTheRewind/Cinder-Asio) CinderBlock and more specifically, currently requires the *dev* branch. The block has only been tested with the [dev](https://github.com/Cinder/Cinder/tree/dev) branch of the [Cinder repository](https://github.com/cinder/Cinder) on OS X Mavericks.

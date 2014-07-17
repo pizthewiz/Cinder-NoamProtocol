@@ -184,7 +184,8 @@ void Lemma::setupDiscoveryServer(uint16_t port) {
         mUDPServerSession->connectErrorEventHandler([](std::string err, size_t bytesTransferred) {
             cinder::app::console() << "ERROR - UDP server session - " << err << std::endl;
         });
-        mUDPServerSession->connectReadEventHandler2([&](ci::Buffer buffer, boost::asio::ip::udp::endpoint endpoint) {
+        mUDPServerSession->connectReadEventHandler([&](ci::Buffer buffer) {
+            boost::asio::ip::udp::endpoint endpoint = mUDPServerSession->getRemoteEndpoint();
             std::string response = UdpSession::bufferToString(buffer);
             cinder::app::console() << "NOTICE - host server response - " << response << "\" from " << endpoint << std::endl;
             JsonTree data = JsonTree(response);
@@ -206,7 +207,6 @@ void Lemma::setupDiscoveryServer(uint16_t port) {
     });
 
     // listen on client send port
-    mUDPServer->setReuseAddress(true);
     mUDPServer->accept(port);
     cinder::app::console() << "NOTICE - UDP server listening on port " << port << std::endl;
 }
